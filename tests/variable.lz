@@ -1,0 +1,9 @@
+# with type
+let string: name = "Adit";
+
+println(name);
+
+# with outo type
+# lizard does not yet support immutable variables, and mutable variables must be declared using "let". 
+let name = "ADIT";
+println(name);
