@@ -94,7 +94,7 @@ println(name);
 - [ ] Macro functions (under consideration for interpreted language)
 - [ ] Fully featured Object-Oriented Programming (OOP)
 - [ ] Standard Library (0% complete)
-- [ ] String formatting (e.g., "Hello {name}")
+- [x] String formatting (e.g., "Hello ${name}")
 - [ ] Assignment operators (+=, -=, etc.)
 - [ ] Logical and comparison operators (==, !=, &&, ||, etc.)
 - [ ] Boolean data type and expressions
