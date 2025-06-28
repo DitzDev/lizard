@@ -1,5 +1,6 @@
 #include "interpreter.h"
 #include "error.h"
+#include "parser.h"
 
 static bool is_compatible_type(Value *value, const char *expected_type) {
   if (!expected_type)
@@ -377,10 +378,20 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
     } else {
       value = value_create_null();
     }
-    environment_define(interpreter->current_env,
-                       node->variable_declaration.name, value,
-                       node->variable_declaration.var_type);
-    return NULL;
+
+    if (!environment_define(interpreter->current_env,
+                            node->variable_declaration.name, value,
+                            node->variable_declaration.var_type)) {
+      error_report(
+          ERROR_RUNTIME, node->pos, "Variable already declared in this scope",
+          "Use a different variable name or assign to existing variable");
+      value_destroy(value);
+      return NULL;
+    }
+
+    Value *result = value_copy(value);
+    value_destroy(value);
+    return result;
   }
 
   case AST_FUNCTION_DECLARATION: {
@@ -471,6 +482,24 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
   case AST_FORMAT_STRING:
     return evaluate_format_string(interpreter, node);
 
+  case AST_ASSIGNMENT_EXPRESSION: {
+    Value *value =
+        interpreter_evaluate(interpreter, node->assignment_expression.value);
+    if (!value)
+      return NULL;
+
+    if (!environment_set(interpreter->current_env,
+                         node->assignment_expression.name, value)) {
+      error_report(ERROR_RUNTIME, node->pos, "Variable not declared",
+                   "Declare the variable with 'let' before assignment");
+      value_destroy(value);
+      return NULL;
+    }
+
+    Value *result = value_copy(value);
+    value_destroy(value);
+    return result;
+  }
   case AST_IMPORT_STATEMENT:
     // Import handling should be done before interpretation
     return NULL;

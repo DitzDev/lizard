@@ -18,7 +18,8 @@ typedef enum {
     AST_IDENTIFIER,
     AST_LITERAL,
     AST_FORMAT_STRING,
-    AST_IMPORT_STATEMENT
+    AST_IMPORT_STATEMENT,
+    AST_ASSIGNMENT_EXPRESSION
 } ASTNodeType;
 
 typedef struct ASTNode {
@@ -35,6 +36,11 @@ typedef struct ASTNode {
             char *var_type;
             struct ASTNode *initializer;
         } variable_declaration;
+        
+        struct {
+            char *name;
+            struct ASTNode *value;
+        } assignment_expression;
         
         struct {
             char *name;

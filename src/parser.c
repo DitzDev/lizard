@@ -7,7 +7,7 @@
 #define MAX_PARAMS 100
 #define MAX_STATEMENTS 1000
 #define MAX_IMPORTS 100
-#define MAX_FORMAT_EXPRESSIONS 100
+#define MAX_FORMAT_EXPRESSIONS 1000
 
 Parser *parser_create(Token *tokens, size_t token_count) {
   Parser *parser = malloc(sizeof(Parser));
@@ -411,7 +411,7 @@ static ASTNode *parser_parse_variable_declaration(Parser *parser) {
       error_report(ERROR_PARSER, parser_current_token(parser)->pos,
                    "Expected variable name after type annotation",
                    "Use format: let type: name = value");
-      parser_advance(parser);                
+      parser_advance(parser);
       return NULL;
     }
 
@@ -428,7 +428,7 @@ static ASTNode *parser_parse_variable_declaration(Parser *parser) {
     error_report(ERROR_PARSER, parser_current_token(parser)->pos,
                  "Expected variable name or type annotation",
                  "Use 'let name = value' or 'let type: name = value'");
-    parser_advance(parser);                
+    parser_advance(parser);
     return NULL;
   }
 
@@ -566,7 +566,7 @@ static ASTNode *parser_parse_function_declaration(Parser *parser) {
   }
 
   if (parser_match(parser, TOKEN_ARROW)) {
-   // Position arrow_pos = parser_current_token(parser)->pos;
+    // Position arrow_pos = parser_current_token(parser)->pos;
     if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
       error_report(ERROR_PARSER, parser_current_token(parser)->pos,
                    "Expected return type after '->'",
@@ -576,7 +576,7 @@ static ASTNode *parser_parse_function_declaration(Parser *parser) {
     }
     node->function_declaration.return_type =
         strdup(parser_current_token(parser)->value);
-   // node->function_declaration.return_type_pos = arrow_pos;
+    // node->function_declaration.return_type_pos = arrow_pos;
     if (!node->function_declaration.return_type) {
       ast_destroy(node);
       return NULL;
@@ -618,6 +618,26 @@ static ASTNode *parser_parse_return_statement(Parser *parser) {
   return node;
 }
 
+static ASTNode *parser_parse_assignment_or_expression(Parser *parser) {
+  if (parser_current_token(parser)->type == TOKEN_IDENTIFIER) {
+    Token *id_token = parser_current_token(parser);
+
+    if (parser_peek_token(parser)->type == TOKEN_ASSIGN) {
+      parser_advance(parser); // skip identifier
+      parser_advance(parser); // skip '='
+
+      ASTNode *assignment =
+          ast_create_node(AST_ASSIGNMENT_EXPRESSION, id_token->pos);
+      assignment->assignment_expression.name = strdup(id_token->value);
+      assignment->assignment_expression.value = parser_parse_expression(parser);
+
+      return assignment;
+    }
+  }
+
+  return parser_parse_expression(parser);
+}
+
 static ASTNode *parser_parse_import_statement(Parser *parser) {
   Token *token = parser_current_token(parser);
   parser_advance(parser); // consume 'import'
@@ -636,7 +656,7 @@ static ASTNode *parser_parse_import_statement(Parser *parser) {
       error_report(ERROR_PARSER, parser_current_token(parser)->pos,
                    "Expected identifier in import list",
                    "Import specific function names");
-      parser_advance(parser);              
+      parser_advance(parser);
       return NULL;
     }
 
@@ -687,6 +707,21 @@ static ASTNode *parser_parse_statement(Parser *parser) {
   case TOKEN_LBRACE:
     parser_advance(parser);
     return parser_parse_block_statement(parser);
+  case TOKEN_IDENTIFIER: {
+    if (parser_peek_token(parser)->type == TOKEN_ASSIGN) {
+      ASTNode *assignment = parser_parse_assignment_or_expression(parser);
+      parser_match(parser, TOKEN_SEMICOLON);
+      return assignment;
+    }
+    ASTNode *expr = parser_parse_expression(parser);
+    if (expr) {
+      ASTNode *stmt = ast_create_node(AST_EXPRESSION_STATEMENT, token->pos);
+      stmt->expression_statement.expression = expr;
+      parser_match(parser, TOKEN_SEMICOLON);
+      return stmt;
+    }
+    return NULL;
+  }
   default: {
     // Expression statement
     ASTNode *expr = parser_parse_expression(parser);
@@ -794,6 +829,10 @@ void ast_destroy(ASTNode *node) {
       ast_destroy(node->format_string.expressions[i]);
     }
     free(node->format_string.expressions);
+    break;
+  case AST_ASSIGNMENT_EXPRESSION:
+    free(node->assignment_expression.name);
+    ast_destroy(node->assignment_expression.value);
     break;
   case AST_IMPORT_STATEMENT:
     for (int i = 0; i < node->import_statement.name_count; i++) {
@@ -907,6 +946,10 @@ void ast_print(ASTNode *node, int indent) {
     for (int i = 0; i < node->format_string.expression_count; i++) {
       ast_print(node->format_string.expressions[i], indent + 1);
     }
+    break;
+  case AST_ASSIGNMENT_EXPRESSION:
+    printf("Assignment: %s\n", node->assignment_expression.name);
+    ast_print(node->assignment_expression.value, indent + 1);
     break;
   case AST_IMPORT_STATEMENT:
     printf("Import: %d items\n", node->import_statement.name_count);

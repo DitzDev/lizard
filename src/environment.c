@@ -1,9 +1,11 @@
 #include "environment.h"
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 Environment *environment_create(Environment *parent) {
     Environment *env = malloc(sizeof(Environment));
+    if (!env) return NULL;
+    
     env->entries = NULL;
     env->parent = parent;
     return env;
@@ -21,29 +23,46 @@ void environment_destroy(Environment *env) {
         free(current);
         current = next;
     }
+    
     free(env);
 }
 
-void environment_define(Environment *env, const char *name, Value *value, const char *type) {
-    EnvEntry *entry = malloc(sizeof(EnvEntry));
-    entry->name = strdup(name);
-    entry->value = value_copy(value);
-    entry->type = type ? strdup(type) : NULL;
-    entry->next = env->entries;
-    env->entries = entry;
-}
-
-Value *environment_get(Environment *env, const char *name) {
+bool environment_define(Environment *env, const char *name, Value *value, const char *type) {
+    if (!env || !name || !value) return false;
+    
     EnvEntry *current = env->entries;
     while (current) {
         if (strcmp(current->name, name) == 0) {
-            return current->value;
+            return false;
         }
         current = current->next;
     }
+   
+    EnvEntry *new_entry = malloc(sizeof(EnvEntry));
+    if (!new_entry) return false;
     
-    if (env->parent) {
-        return environment_get(env->parent, name);
+    new_entry->name = strdup(name);
+    new_entry->value = value_copy(value);
+    new_entry->type = type ? strdup(type) : NULL;
+    new_entry->next = env->entries; 
+    
+    env->entries = new_entry;
+    return true;
+}
+
+Value *environment_get(Environment *env, const char *name) {
+    if (!env || !name) return NULL;
+    
+    Environment *current_env = env;
+    while (current_env) {
+        EnvEntry *current = current_env->entries;
+        while (current) {
+            if (strcmp(current->name, name) == 0) {
+                return current->value;
+            }
+            current = current->next;
+        }
+        current_env = current_env->parent;
     }
     
     return NULL;
@@ -53,18 +72,22 @@ bool environment_exists(Environment *env, const char *name) {
     return environment_get(env, name) != NULL;
 }
 
-void environment_set(Environment *env, const char *name, Value *value) {
-    EnvEntry *current = env->entries;
-    while (current) {
-        if (strcmp(current->name, name) == 0) {
-            value_destroy(current->value);
-            current->value = value_copy(value);
-            return;
+bool environment_set(Environment *env, const char *name, Value *value) {
+    if (!env || !name || !value) return false;
+    
+    Environment *current_env = env;
+    while (current_env) {
+        EnvEntry *current = current_env->entries;
+        while (current) {
+            if (strcmp(current->name, name) == 0) {
+                value_destroy(current->value);
+                current->value = value_copy(value);
+                return true;
+            }
+            current = current->next;
         }
-        current = current->next;
+        current_env = current_env->parent;
     }
     
-    if (env->parent) {
-        environment_set(env->parent, name, value);
-    }
+    return false;
 }

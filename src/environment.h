@@ -18,9 +18,9 @@ typedef struct Environment {
 
 Environment *environment_create(Environment *parent);
 void environment_destroy(Environment *env);
-void environment_define(Environment *env, const char *name, Value *value, const char *type);
+bool environment_define(Environment *env, const char *name, Value *value, const char *type);
 Value *environment_get(Environment *env, const char *name);
 bool environment_exists(Environment *env, const char *name);
-void environment_set(Environment *env, const char *name, Value *value);
+bool environment_set(Environment *env, const char *name, Value *value);
 
 #endif
