@@ -324,7 +324,9 @@ static ASTNode *parser_parse_multiplicative(Parser *parser) {
     return NULL;
 
   while (parser_current_token(parser)->type == TOKEN_MULTIPLY ||
-         parser_current_token(parser)->type == TOKEN_DIVIDE) {
+         parser_current_token(parser)->type == TOKEN_DIVIDE ||
+         parser_current_token(parser)->type == TOKEN_MODULO ||
+         parser_current_token(parser)->type == TOKEN_INT_DIVIDE) {
     Token *op = parser_current_token(parser);
     parser_advance(parser);
 

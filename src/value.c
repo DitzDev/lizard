@@ -89,9 +89,10 @@ void value_print(Value *value) {
   switch (value->type) {
   case VALUE_INT:
     printf("%d", value->int_val);
-    break;
+    break;   
   case VALUE_FLOAT:
-    printf("%.2f", value->float_val);
+    // Lizard won't care if the result is too big
+    printf("%.128g", value->float_val);
     break;
   case VALUE_STRING:
     printf("%s", value->string_val);
@@ -118,7 +119,7 @@ char *value_to_string(Value *value) {
     snprintf(result, 256, "%d", value->int_val);
     break;
   case VALUE_FLOAT:
-    snprintf(result, 256, "%.2f", value->float_val);
+    snprintf(result, 256, "%.17g", value->float_val);
     break;
   case VALUE_STRING:
     return strdup(value->string_val);

@@ -144,9 +144,41 @@ static Value *evaluate_binary_expression(Interpreter *interpreter,
     }
     break;
 
+  case TOKEN_MODULO:
+    if (left->type == VALUE_INT && right->type == VALUE_INT) {
+      if (right->int_val == 0) {
+        error_report(ERROR_RUNTIME, node->pos, "Modulo by zero",
+                     "Check the divisor value before performing modulo operation");
+        value_destroy(left);
+        value_destroy(right);
+        return NULL;
+      }
+      result = value_create_int(left->int_val % right->int_val);
+    } else {
+      error_report(ERROR_RUNTIME, node->pos, "Modulo operation requires integer operands",
+                   "Use integer values for modulo operation");
+    }
+    break;
+    
+  case TOKEN_INT_DIVIDE:
+    if (left->type == VALUE_INT && right->type == VALUE_INT) {
+      if (right->int_val == 0) {
+        error_report(ERROR_RUNTIME, node->pos, "Integer division by zero",
+                     "Check the divisor value before performing integer division");
+        value_destroy(left);
+        value_destroy(right);
+        return NULL;
+      }
+      result = value_create_int(left->int_val / right->int_val);
+    } else {
+      error_report(ERROR_RUNTIME, node->pos, "Integer division requires integer operands",
+                   "Use integer values for integer division operation");
+    }
+    break;
+
   default:
     error_report(ERROR_RUNTIME, node->pos, "Unsupported binary operator",
-                 "Use supported operators: +, -, *, /");
+                 "Use supported operators: +, -, *, /, %, %%");
     break;
   }
 

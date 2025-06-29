@@ -250,6 +250,13 @@ Token *lexer_tokenize(Lexer *lexer) {
             continue;
         }
         
+        if (current == '%' && lexer_peek_char(lexer) == '%') {
+            lexer_advance(lexer);
+            lexer_advance(lexer);
+            lexer_add_token(lexer, TOKEN_INT_DIVIDE, "%%");
+            continue;
+        }
+        
         // Single-character tokens
         switch (current) {
             case ':': lexer_add_token(lexer, TOKEN_COLON, ":"); break;
@@ -261,6 +268,7 @@ Token *lexer_tokenize(Lexer *lexer) {
             case '-': lexer_add_token(lexer, TOKEN_MINUS, "-"); break;
             case '*': lexer_add_token(lexer, TOKEN_MULTIPLY, "*"); break;
             case '/': lexer_add_token(lexer, TOKEN_DIVIDE, "/"); break;
+            case '%': lexer_add_token(lexer, TOKEN_MODULO, "%"); break;
             case '(': lexer_add_token(lexer, TOKEN_LPAREN, "("); break;
             case ')': lexer_add_token(lexer, TOKEN_RPAREN, ")"); break;
             case '{': lexer_add_token(lexer, TOKEN_LBRACE, "{"); break;
@@ -304,6 +312,8 @@ const char *token_type_to_string(TokenType type) {
         case TOKEN_MINUS: return "MINUS";
         case TOKEN_MULTIPLY: return "MULTIPLY";
         case TOKEN_DIVIDE: return "DIVIDE";
+        case TOKEN_MODULO: return "MODULO";         
+        case TOKEN_INT_DIVIDE: return "INT_DIVIDE";
         case TOKEN_LPAREN: return "LPAREN";
         case TOKEN_RPAREN: return "RPAREN";
         case TOKEN_LBRACE: return "LBRACE";
