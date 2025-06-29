@@ -1,11 +1,3 @@
-# function with outo type detection
-fnc sayHello(string name = "You!") {
-   return "Hai ${name}";
-}
-
-println(sayHello("Adit"))
-
-# add operation
 fnc add(int a, int b ) -> int {
    return a + b 
 }
@@ -33,11 +25,11 @@ fnc division(int a, int b ) {
 
 println(division(100, 20))
 
-fnc greet(name = "World", age = 0) {
-   return "Hello ${name}, you are ${age} years old";
+# yang belum
+fnc div_int(int a, int b) {
+   return a %% b
 }
 
-
-println(sayHello());
-println(sayHello("Adit"));
-println(greet("Alice", 25));
+fnc modulo(int a, int b) {
+   return a % b
+}

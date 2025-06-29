@@ -6,8 +6,8 @@ static Position last_error_pos = {0, 0, NULL};
 
 const char *error_type_to_string(ErrorType type) {
     switch (type) {
-        case ERROR_LEXER: return "Lexing Error";
-        case ERROR_PARSER: return "Parsing Error";
+        case ERROR_LEXER: return "Lexer Error";
+        case ERROR_PARSER: return "Parser Error";
         case ERROR_RUNTIME: return "Runtime Error";
         case ERROR_IMPORT: return "Import Error";
         case ERROR_TYPE: return "Type Error";
@@ -20,6 +20,84 @@ bool is_same_position(Position pos1, Position pos2) {
            pos1.column == pos2.column && 
            pos1.filename && pos2.filename &&
            strcmp(pos1.filename, pos2.filename) == 0;
+}
+
+int get_error_highlight_width(ErrorType type, const char *code_line, int column) {
+    if (!code_line || column < 1) return 1;
+    
+    int line_len = strlen(code_line);
+    if (column > line_len) return 1;
+    
+    switch (type) {
+        case ERROR_LEXER: {
+            char current_char = code_line[column - 1];
+            
+            if (current_char == '%' && column < line_len && code_line[column] == '%') {
+                return 2; // %% 
+            }
+            if (current_char == '=' && column < line_len && code_line[column] == '=') {
+                return 2; // ==
+            }
+            if (current_char == '!' && column < line_len && code_line[column] == '=') {
+                return 2; // !=
+            }
+            if (current_char == '<' && column < line_len && code_line[column] == '=') {
+                return 2; // <=
+            }
+            if (current_char == '>' && column < line_len && code_line[column] == '=') {
+                return 2; // >=
+            }
+            if (current_char == '&' && column < line_len && code_line[column] == '&') {
+                return 2; // &&
+            }
+            if (current_char == '|' && column < line_len && code_line[column] == '|') {
+                return 2; // ||
+            }
+            
+            return 1;
+        }
+        
+        case ERROR_TYPE: {
+            int start = column - 2 * 2;
+            int end = start;
+            
+            while (end < line_len && 
+                   (isalnum(code_line[end]) || code_line[end] == '_' || 
+                    code_line[end] == '"' || code_line[end] == '\'' || 
+                    code_line[end] == '.')) {
+                end++;
+            }
+            
+            if (start < line_len && code_line[start] == '"') {
+                while (end < line_len && code_line[end] != '"') {
+                    end++;
+                }
+                if (end < line_len) end++;
+            }
+            
+            return (end - start) > 0 ? (end - start) : 2;
+        }
+        
+        case ERROR_PARSER: {
+            int start = column - 1;
+            int end = start;
+            
+            while (start > 0 && isspace(code_line[start - 1])) {
+                start--;
+            }
+            
+            while (end < line_len && !isspace(code_line[end]) && 
+                   code_line[end] != ';' && code_line[end] != ',' && 
+                   code_line[end] != '(' && code_line[end] != ')') {
+                end++;
+            }
+            
+            return (end - start) > 0 ? (end - start) : 1;
+        }
+        
+        default:
+            return 1;
+    }
 }
 
 void error_show_code_context(const char *filename, int line, int column) {
@@ -41,17 +119,60 @@ void error_show_code_context(const char *filename, int line, int column) {
         
         printf("   %d | %s\n", line, buffer);
         
-        int line_prefix_width = 3;
+        int line_prefix_width = 3; // "   "
         int line_num_width = snprintf(NULL, 0, "%d", line);
-        line_prefix_width += line_num_width + 4;
+        line_prefix_width += line_num_width + 3;
+        
         for (int i = 0; i < line_prefix_width; i++) {
             printf(" ");
         }
-
+        
         for (int i = 1; i < column; i++) {
             printf(" ");
         }
         printf("^ here\n");
+    }
+    
+    fclose(file);
+}
+
+void error_show_code_context_smart(const char *filename, int line, int column, ErrorType type) {
+    FILE *file = fopen(filename, "r");
+    if (!file) return;
+    
+    char buffer[1024];
+    int current_line = 1;
+    
+    while (fgets(buffer, sizeof(buffer), file) && current_line < line) {
+        current_line++;
+    }
+    
+    if (current_line == line) {
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len-1] == '\n') {
+            buffer[len-1] = '\0';
+        }
+        
+        printf("   %d | %s\n", line, buffer);
+        
+        int line_prefix_width = 3;
+        int line_num_width = snprintf(NULL, 0, "%d", line);
+        line_prefix_width += line_num_width + 3;
+        
+        for (int i = 0; i < line_prefix_width; i++) {
+            printf(" ");
+        }
+        
+        for (int i = 1; i < column; i++) {
+            printf(" ");
+        }
+        
+        int highlight_width = get_error_highlight_width(type, buffer, column);
+        
+        for (int i = 0; i < highlight_width; i++) {
+            printf("^");
+        }
+        printf(" here\n");
     }
     
     fclose(file);
@@ -67,7 +188,7 @@ void error_report(ErrorType type, Position pos, const char *message, const char 
     
     printf("   \033[1;31mError:\033[0m %s\n", message);
     
-    error_show_code_context(pos.filename, pos.line, pos.column);
+    error_show_code_context_smart(pos.filename, pos.line, pos.column, type);
     
     if (suggestion) {
         printf("   \033[1;36mNote:\033[0m %s\n", suggestion);
@@ -132,7 +253,7 @@ void error_report_with_recovery(ErrorType type, Position pos, const char *messag
     
     printf("   \033[1;31mError:\033[0m %s\n", message);
     
-    error_show_code_context(pos.filename, pos.line, pos.column);
+    error_show_code_context_smart(pos.filename, pos.line, pos.column, type);
     
     if (suggestion) {
         printf("   \033[1;36mNote:\033[0m %s\n", suggestion);
@@ -160,7 +281,7 @@ void error_report_type_fatal(Position pos, const char *message, const char *sugg
     
     printf("   \033[1;31mFatal Error:\033[0m %s\n", message);
     
-    error_show_code_context(pos.filename, pos.line, pos.column);
+    error_show_code_context_smart(pos.filename, pos.line, pos.column, ERROR_TYPE);
     
     if (suggestion) {
         printf("   \033[1;36mNote:\033[0m %s\n", suggestion);

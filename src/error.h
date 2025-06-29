@@ -38,5 +38,7 @@ void error_show_code_context(const char *filename, int line, int column);
 void error_reset_state(void);
 bool is_same_position(Position pos1, Position pos2);
 void error_report_type_fatal(Position pos, const char *message, const char *suggestion);
+void error_show_code_context_smart(const char *filename, int line, int column, ErrorType type);
+int get_error_highlight_width(ErrorType type, const char *code_line, int column);
 
 #endif
