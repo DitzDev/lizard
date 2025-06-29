@@ -313,6 +313,9 @@ static Value *evaluate_format_string(Interpreter *interpreter, ASTNode *node) {
           expr_index < node->format_string.expression_count) {
         Value *expr_value = interpreter_evaluate(
             interpreter, node->format_string.expressions[expr_index]);
+        if (!expr_value) {
+           printf("LIZARD-INTERPRET-DEBUG: Failed to evaluate expression at index %d\n", expr_index);
+        }
         if (expr_value) {
           char *expr_str = value_to_string(expr_value);
           size_t expr_len = strlen(expr_str);
@@ -328,6 +331,17 @@ static Value *evaluate_format_string(Interpreter *interpreter, ASTNode *node) {
 
           free(expr_str);
           value_destroy(expr_value);
+        } else {
+           char placeholder[256];
+          size_t placeholder_len = end - (i + 2);
+          strncpy(placeholder, template + i, end - i + 1);
+          placeholder[end - i + 1] = '\0';
+          
+          size_t ph_len = strlen(placeholder);
+          while (result_len + ph_len >= result_capacity) {
+            result_capacity *= 2;
+            result = realloc(result, result_capacity);
+          }
         }
         expr_index++;
         i = end;

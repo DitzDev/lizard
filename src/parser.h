@@ -94,6 +94,12 @@ typedef struct ASTNode {
         struct {
             Value *value;
         } literal;
+        struct {
+            char **names;
+            int name_count;
+            char *module_path;
+            char **aliases;
+        } string_literal;
         
         struct {
             char *template;

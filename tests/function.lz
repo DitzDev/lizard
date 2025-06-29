@@ -1,6 +1,6 @@
 # function with outo type detection
 fnc sayHello(string name) {
-   return "Hai " + name;
+   return "Hai ${name}";
 }
 
 println(sayHello("Adit"))

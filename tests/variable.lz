@@ -4,6 +4,9 @@ let string: name = "Adit";
 println(name);
 
 # with outo type
-# lizard does not yet support immutable variable.
-name1 = "ADIT";
+# lizard does not support immutable variable for now.
+name = "ADIT";
 println("Hello my name is ${name}");
+let int: age = 17
+let string: intro = "Hello My name is ${name} and my age is ${age}"
+println(intro)

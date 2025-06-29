@@ -86,6 +86,82 @@ static ASTNode *ast_create_node(ASTNodeType type, Position pos) {
   return node;
 }
 
+static ASTNode *parser_parse_format_string(Parser *parser,
+                                           const char *template) {
+  ASTNode *node =
+      ast_create_node(AST_FORMAT_STRING, parser_current_token(parser)->pos);
+  if (!node)
+    return NULL;
+
+  node->format_string.template = strdup(template);
+  if (!node->format_string.template) {
+    ast_destroy(node);
+    return NULL;
+  }
+
+  node->format_string.expressions =
+      malloc(sizeof(ASTNode *) * MAX_FORMAT_EXPRESSIONS);
+  if (!node->format_string.expressions) {
+    ast_destroy(node);
+    return NULL;
+  }
+
+  node->format_string.expression_count = 0;
+
+  char *str = strdup(template);
+  if (!str) {
+    ast_destroy(node);
+    return NULL;
+  }
+
+  char *pos = str;
+
+  while ((pos = strchr(pos, '{')) != NULL &&
+         node->format_string.expression_count < MAX_FORMAT_EXPRESSIONS) {
+    char *end = strchr(pos, '}');
+    if (end) {
+      *end = '\0';
+      char *var_name = pos + 1;
+
+      ASTNode *var_node =
+          ast_create_node(AST_IDENTIFIER, parser_current_token(parser)->pos);
+      if (!var_node) {
+        free(str);
+        ast_destroy(node);
+        return NULL;
+      }
+
+      var_node->identifier.name = strdup(var_name);
+      if (!var_node->identifier.name) {
+        ast_destroy(var_node);
+        free(str);
+        ast_destroy(node);
+        return NULL;
+      }
+
+      node->format_string.expressions[node->format_string.expression_count++] =
+          var_node;
+      pos = end + 1;
+    } else {
+      break;
+    }
+  }
+
+  free(str);
+  return node;
+}
+
+static ASTNode *parser_process_string_literal(Parser *parser, const char *str_value, Position pos) {
+  if (str_value && strchr(str_value, '$') && strchr(str_value, '{') && strchr(str_value, '}')) {
+    return parser_parse_format_string(parser, str_value);
+  } else {
+    ASTNode *node = ast_create_node(AST_LITERAL, pos);
+    if (!node) return NULL;
+    node->literal.value = value_create_string(str_value);
+    return node;
+  }
+}
+
 static ASTNode *parser_parse_expression(Parser *parser);
 static ASTNode *parser_parse_statement(Parser *parser);
 
@@ -108,12 +184,7 @@ static ASTNode *parser_parse_primary(Parser *parser) {
 
   if (token->type == TOKEN_STRING) {
     parser_advance(parser);
-    ASTNode *node = ast_create_node(AST_LITERAL, token->pos);
-    if (!node)
-      return NULL;
-
-    node->literal.value = value_create_string(token->value);
-    return node;
+    return parser_process_string_literal(parser, token->value, token->pos);
   }
 
   if (token->type == TOKEN_IDENTIFIER) {
@@ -189,6 +260,40 @@ static ASTNode *parser_parse_primary(Parser *parser) {
                "Expected a number, string, identifier, or closing '(' and ')'");
   parser_advance(parser);
   return NULL;
+}
+
+static ASTNode *parser_parse_print_statement(Parser *parser) {
+  Token *token = parser_current_token(parser);
+  bool newline = (token->type == TOKEN_PRINTLN);
+  parser_advance(parser);
+
+  if (!parser_expect(parser, TOKEN_LPAREN,
+                     "Expected '(' after print/println")) {
+    return NULL;
+  }
+
+  ASTNode *node = ast_create_node(AST_PRINT_STATEMENT, token->pos);
+  if (!node)
+    return NULL;
+
+  node->print_statement.newline = newline;
+
+  ASTNode *expr = parser_parse_expression(parser);
+  if (!expr) {
+    ast_destroy(node);
+    return NULL;
+  }
+
+  node->print_statement.expression = expr;
+
+  if (!parser_expect(parser, TOKEN_RPAREN,
+                     "Expected ')' after print expression")) {
+    ast_destroy(node);
+    return NULL;
+  }
+
+  parser_match(parser, TOKEN_SEMICOLON);
+  return node;
 }
 
 static ASTNode *parser_parse_unary(Parser *parser) {
@@ -277,119 +382,6 @@ static ASTNode *parser_parse_additive(Parser *parser) {
 
 static ASTNode *parser_parse_expression(Parser *parser) {
   return parser_parse_additive(parser);
-}
-
-static ASTNode *parser_parse_format_string(Parser *parser,
-                                           const char *template) {
-  ASTNode *node =
-      ast_create_node(AST_FORMAT_STRING, parser_current_token(parser)->pos);
-  if (!node)
-    return NULL;
-
-  node->format_string.template = strdup(template);
-  if (!node->format_string.template) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  node->format_string.expressions =
-      malloc(sizeof(ASTNode *) * MAX_FORMAT_EXPRESSIONS);
-  if (!node->format_string.expressions) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  node->format_string.expression_count = 0;
-
-  char *str = strdup(template);
-  if (!str) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  char *pos = str;
-
-  while ((pos = strchr(pos, '{')) != NULL &&
-         node->format_string.expression_count < MAX_FORMAT_EXPRESSIONS) {
-    char *end = strchr(pos, '}');
-    if (end) {
-      *end = '\0';
-      char *var_name = pos + 1;
-
-      ASTNode *var_node =
-          ast_create_node(AST_IDENTIFIER, parser_current_token(parser)->pos);
-      if (!var_node) {
-        free(str);
-        ast_destroy(node);
-        return NULL;
-      }
-
-      var_node->identifier.name = strdup(var_name);
-      if (!var_node->identifier.name) {
-        ast_destroy(var_node);
-        free(str);
-        ast_destroy(node);
-        return NULL;
-      }
-
-      node->format_string.expressions[node->format_string.expression_count++] =
-          var_node;
-      pos = end + 1;
-    } else {
-      break;
-    }
-  }
-
-  free(str);
-  return node;
-}
-
-static ASTNode *parser_parse_print_statement(Parser *parser) {
-  Token *token = parser_current_token(parser);
-  bool newline = (token->type == TOKEN_PRINTLN);
-  parser_advance(parser);
-
-  if (!parser_expect(parser, TOKEN_LPAREN,
-                     "Expected '(' after print/println")) {
-    return NULL;
-  }
-
-  ASTNode *node = ast_create_node(AST_PRINT_STATEMENT, token->pos);
-  if (!node)
-    return NULL;
-
-  node->print_statement.newline = newline;
-
-  ASTNode *expr = parser_parse_expression(parser);
-  if (!expr) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  if (expr->type == AST_LITERAL && expr->literal.value &&
-      expr->literal.value->type == VALUE_STRING) {
-    char *str = expr->literal.value->string_val;
-    if (str && strchr(str, '{') && strchr(str, '}')) {
-      ASTNode *format_node = parser_parse_format_string(parser, str);
-      ast_destroy(expr);
-      if (!format_node) {
-        ast_destroy(node);
-        return NULL;
-      }
-      expr = format_node;
-    }
-  }
-
-  node->print_statement.expression = expr;
-
-  if (!parser_expect(parser, TOKEN_RPAREN,
-                     "Expected ')' after print expression")) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  parser_match(parser, TOKEN_SEMICOLON);
-  return node;
 }
 
 static ASTNode *parser_parse_variable_declaration(Parser *parser) {
