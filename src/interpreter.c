@@ -196,25 +196,93 @@ static Value *evaluate_function_call(Interpreter *interpreter, ASTNode *node) {
   }
 
   Function *func = func_value->function_val;
-
-  if (node->function_call.argument_count != func->param_count) {
-    error_report(ERROR_RUNTIME, node->pos, "Argument count mismatch",
-                 "Check the function signature and provide the correct number "
-                 "of arguments");
+  int provided_args = node->function_call.argument_count;
+  int required_args = func->param_count;
+  
+  int min_required_args = 0;
+  for (int i = 0; i < func->param_count; i++) {
+    if (!func->param_has_default[i]) {
+      min_required_args++;
+    }
+  }
+  
+  if (provided_args < min_required_args || provided_args > required_args) {
+    char error_msg[256];
+    if (min_required_args == required_args) {
+      snprintf(error_msg, sizeof(error_msg), 
+               "Function '%s' expects %d arguments, got %d",
+               func->name, required_args, provided_args);
+    } else {
+      snprintf(error_msg, sizeof(error_msg), 
+               "Function '%s' expects %d-%d arguments, got %d",
+               func->name, min_required_args, required_args, provided_args);
+    }
+    error_report(ERROR_RUNTIME, node->pos, error_msg,
+                 "Check the function signature and provide the correct number of arguments");
     return NULL;
   }
 
   Environment *func_env = environment_create(interpreter->current_env);
 
   for (int i = 0; i < func->param_count; i++) {
-    Value *arg_value =
-        interpreter_evaluate(interpreter, node->function_call.arguments[i]);
-    if (!arg_value) {
+    Value *arg_value = NULL;
+    char *param_type = func->param_types[i];
+    
+    if (i < provided_args) {
+      arg_value = interpreter_evaluate(interpreter, node->function_call.arguments[i]);
+      if (!arg_value) {
+        environment_destroy(func_env);
+        return NULL;
+      }
+
+      if (!param_type) {
+        param_type = infer_type_from_value(arg_value);
+        if (func->param_types[i]) {
+          free(func->param_types[i]);
+        }
+        func->param_types[i] = strdup(param_type);
+        free(param_type);
+        param_type = func->param_types[i];
+      }
+    } else {
+      if (func->param_has_default[i]) {
+        arg_value = interpreter_evaluate(interpreter, func->param_defaults[i]);
+        if (!arg_value) {
+          environment_destroy(func_env);
+          return NULL;
+        }
+        
+        if (!param_type) {
+          param_type = infer_type_from_value(arg_value);
+          if (func->param_types[i]) {
+            free(func->param_types[i]);
+          }
+          func->param_types[i] = strdup(param_type);
+          free(param_type);
+          param_type = func->param_types[i];
+        }
+      } else {
+        error_report(ERROR_RUNTIME, node->pos, "Missing required argument",
+                     "This is an internal error - please report");
+        environment_destroy(func_env);
+        return NULL;
+      }
+    }
+
+    if (param_type && !is_compatible_type(arg_value, param_type)) {
+      char error_msg[256];
+      snprintf(error_msg, sizeof(error_msg),
+               "Type mismatch for parameter '%s': expected '%s', got '%s'",
+               func->param_names[i], param_type,
+               get_value_type_name(arg_value));
+      error_report(ERROR_TYPE, node->pos, error_msg,
+                   "Check the argument type or function signature");
+      value_destroy(arg_value);
       environment_destroy(func_env);
       return NULL;
     }
-    environment_define(func_env, func->param_names[i], arg_value,
-                       func->param_types[i]);
+
+    environment_define(func_env, func->param_names[i], arg_value, param_type);
   }
 
   Environment *prev_env = interpreter->current_env;
@@ -414,11 +482,16 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
       return_type_pos.column += strlen(node->function_declaration.name) + 10;
     }
     Function *func = function_create(
-        node->function_declaration.name, node->function_declaration.param_names,
-        node->function_declaration.param_types,
-        node->function_declaration.param_count,
-        node->function_declaration.return_type, node->function_declaration.body,
-        node->function_declaration.is_public, return_type_pos);
+      node->function_declaration.name, 
+      node->function_declaration.param_names,
+      node->function_declaration.param_types,
+      node->function_declaration.param_defaults,    // New parameter
+      node->function_declaration.param_has_default, // New parameter
+      node->function_declaration.param_count,
+      node->function_declaration.return_type, 
+      node->function_declaration.body,
+      node->function_declaration.is_public, 
+      node->pos); 
 
     Value *func_value = value_create_function(func);
     environment_define(interpreter->current_env,

@@ -37,5 +37,6 @@ const char *error_type_to_string(ErrorType type);
 void error_show_code_context(const char *filename, int line, int column);
 void error_reset_state(void);
 bool is_same_position(Position pos1, Position pos2);
+void error_report_type_fatal(Position pos, const char *message, const char *suggestion);
 
 #endif

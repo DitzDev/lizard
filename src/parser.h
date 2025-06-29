@@ -47,6 +47,8 @@ typedef struct ASTNode {
             char **param_names;
             char **param_types;
             int param_count;
+            struct ASTNode **param_defaults;
+            bool *param_has_default;
             char *return_type;
             struct ASTNode *body;
             bool is_public;

@@ -502,51 +502,94 @@ static ASTNode *parser_parse_function_declaration(Parser *parser) {
 
   node->function_declaration.param_names = malloc(sizeof(char *) * 100);
   node->function_declaration.param_types = malloc(sizeof(char *) * 100);
+  node->function_declaration.param_defaults = malloc(sizeof(ASTNode *) * 100);
+  node->function_declaration.param_has_default = malloc(sizeof(bool) * 100);
+  
   if (!node->function_declaration.param_names ||
-      !node->function_declaration.param_types) {
+      !node->function_declaration.param_types ||
+      !node->function_declaration.param_defaults ||
+      !node->function_declaration.param_has_default) {
     ast_destroy(node);
     return NULL;
   }
 
   node->function_declaration.param_count = 0;
+  bool found_default = false;
 
   if (parser_current_token(parser)->type != TOKEN_RPAREN) {
     do {
-      if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
+      char *param_type = NULL;
+      char *param_name = NULL;
+      ASTNode *default_value = NULL;
+      bool has_default = false;
+
+      Token *first_token = parser_current_token(parser);
+      Token *second_token = NULL;
+      
+      if (parser->current + 1 < parser->token_count) {
+        second_token = &parser->tokens[parser->current + 1];
+      }
+
+      bool is_auto_typed = false;
+      
+      if (first_token->type == TOKEN_IDENTIFIER && second_token &&
+          (second_token->type == TOKEN_ASSIGN || second_token->type == TOKEN_COMMA || 
+           second_token->type == TOKEN_RPAREN)) {
+        is_auto_typed = true;
+      }
+
+      if (is_auto_typed) {
+        param_type = NULL;
+        param_name = strdup(first_token->value);
+        parser_advance(parser);
+      } else {
+        if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
+          error_report(ERROR_PARSER, parser_current_token(parser)->pos,
+                       "Expected parameter type", "Use format: type name or just name for auto-typing");
+          ast_destroy(node);
+          return NULL;
+        }
+
+        param_type = strdup(parser_current_token(parser)->value);
+        parser_advance(parser);
+
+        if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
+          error_report(ERROR_PARSER, parser_current_token(parser)->pos,
+                       "Expected parameter name after type",
+                       "Use format: type name");
+          free(param_type);
+          ast_destroy(node);
+          return NULL;
+        }
+
+        param_name = strdup(parser_current_token(parser)->value);
+        parser_advance(parser);
+      }
+
+      if (parser_match(parser, TOKEN_ASSIGN)) {
+        has_default = true;
+        found_default = true;
+        default_value = parser_parse_expression(parser);
+        if (!default_value) {
+          free(param_type);
+          free(param_name);
+          ast_destroy(node);
+          return NULL;
+        }
+      } else if (found_default) {
         error_report(ERROR_PARSER, parser_current_token(parser)->pos,
-                     "Expected parameter type", "Use format: type name");
-        ast_destroy(node);
-        return NULL;
-      }
-
-      char *param_type = strdup(parser_current_token(parser)->value);
-      if (!param_type) {
-        ast_destroy(node);
-        return NULL;
-      }
-      parser_advance(parser);
-
-      if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
-        error_report(ERROR_PARSER, parser_current_token(parser)->pos,
-                     "Expected parameter name after type",
-                     "Use format: type name");
+                     "Non-default parameter follows default parameter",
+                     "All parameters after a default parameter must also have defaults");
         free(param_type);
+        free(param_name);
         ast_destroy(node);
         return NULL;
       }
 
-      char *param_name = strdup(parser_current_token(parser)->value);
-      if (!param_name) {
-        free(param_type);
-        ast_destroy(node);
-        return NULL;
-      }
-      parser_advance(parser);
-
-      node->function_declaration
-          .param_types[node->function_declaration.param_count] = param_type;
-      node->function_declaration
-          .param_names[node->function_declaration.param_count] = param_name;
+      node->function_declaration.param_types[node->function_declaration.param_count] = param_type;
+      node->function_declaration.param_names[node->function_declaration.param_count] = param_name;
+      node->function_declaration.param_defaults[node->function_declaration.param_count] = default_value;
+      node->function_declaration.param_has_default[node->function_declaration.param_count] = has_default;
       node->function_declaration.param_count++;
 
     } while (parser_match(parser, TOKEN_COMMA));
@@ -558,7 +601,6 @@ static ASTNode *parser_parse_function_declaration(Parser *parser) {
   }
 
   if (parser_match(parser, TOKEN_ARROW)) {
-    // Position arrow_pos = parser_current_token(parser)->pos;
     if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
       error_report(ERROR_PARSER, parser_current_token(parser)->pos,
                    "Expected return type after '->'",
@@ -568,7 +610,6 @@ static ASTNode *parser_parse_function_declaration(Parser *parser) {
     }
     node->function_declaration.return_type =
         strdup(parser_current_token(parser)->value);
-    // node->function_declaration.return_type_pos = arrow_pos;
     if (!node->function_declaration.return_type) {
       ast_destroy(node);
       return NULL;
@@ -774,9 +815,14 @@ void ast_destroy(ASTNode *node) {
     for (int i = 0; i < node->function_declaration.param_count; i++) {
       free(node->function_declaration.param_names[i]);
       free(node->function_declaration.param_types[i]);
+      if (node->function_declaration.param_defaults[i]) {
+        ast_destroy(node->function_declaration.param_defaults[i]);
+      }
     }
     free(node->function_declaration.param_names);
     free(node->function_declaration.param_types);
+    free(node->function_declaration.param_defaults);
+    free(node->function_declaration.param_has_default);
     free(node->function_declaration.return_type);
     ast_destroy(node->function_declaration.body);
     break;

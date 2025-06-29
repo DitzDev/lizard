@@ -1,5 +1,5 @@
 # function with outo type detection
-fnc sayHello(string name) {
+fnc sayHello(string name = "You!") {
    return "Hai ${name}";
 }
 
@@ -10,7 +10,7 @@ fnc add(int a, int b ) -> int {
    return a + b 
 }
 
-println(add(30, 20))
+println(add(30, 2000))
 
 # minus operation
 fnc minus(int a, int b ) -> int {
@@ -32,3 +32,12 @@ fnc division(int a, int b ) -> float {
 }
 
 println(division(100, 20))
+
+fnc greet(name = "World", age = 0) {
+   return "Hello ${name}, you are ${age} years old";
+}
+
+
+println(sayHello());
+println(sayHello("Adit"));
+println(greet("Alice", 25));

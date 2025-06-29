@@ -154,10 +154,10 @@ const char *value_type_to_string(ValueType type) {
   }
 }
 
-Function *function_create(const char *name, char **param_names,
-                          char **param_types, int param_count,
-                          const char *return_type, struct ASTNode *body,
-                          bool is_public, Position declaration_pos) {
+Function *function_create(const char *name, char **param_names, char **param_types, 
+                         struct ASTNode **param_defaults, bool *param_has_default,
+                         int param_count, const char *return_type, struct ASTNode *body,
+                         bool is_public, Position declaration_pos) {
   Function *func = malloc(sizeof(Function));
   func->name = strdup(name);
   func->param_count = param_count;
@@ -168,13 +168,20 @@ Function *function_create(const char *name, char **param_names,
   if (param_count > 0) {
     func->param_names = malloc(sizeof(char *) * param_count);
     func->param_types = malloc(sizeof(char *) * param_count);
+    func->param_defaults = malloc(sizeof(struct ASTNode *) * param_count);
+    func->param_has_default = malloc(sizeof(bool) * param_count);
+    
     for (int i = 0; i < param_count; i++) {
       func->param_names[i] = strdup(param_names[i]);
-      func->param_types[i] = strdup(param_types[i]);
+      func->param_types[i] = param_types[i] ? strdup(param_types[i]) : NULL;
+      func->param_defaults[i] = param_defaults[i];
+      func->param_has_default[i] = param_has_default[i];
     }
   } else {
     func->param_names = NULL;
     func->param_types = NULL;
+    func->param_defaults = NULL;
+    func->param_has_default = NULL;
   }
 
   func->return_type = return_type ? strdup(return_type) : NULL;
@@ -193,7 +200,30 @@ void function_destroy(Function *func) {
     }
     free(func->param_names);
     free(func->param_types);
+    free(func->param_defaults);
+    free(func->param_has_default);
   }
   free(func->return_type);
   free(func);
+}
+
+char *infer_type_from_value(Value *value) {
+  if (!value) return strdup("null");
+  
+  switch (value->type) {
+    case VALUE_INT:
+      return strdup("int");
+    case VALUE_FLOAT:
+      return strdup("float");
+    case VALUE_STRING:
+      return strdup("string");
+    case VALUE_BOOL:
+      return strdup("bool");
+    case VALUE_FUNCTION:
+      return strdup("function");
+    case VALUE_NULL:
+      return strdup("null");
+    default:
+      return strdup("unknown");
+  }
 }

@@ -23,6 +23,8 @@ struct Function {
     char *name;
     char **param_names;
     char **param_types;
+    struct ASTNode **param_defaults; // New: default values
+    bool *param_has_default;         // New: track which params have defaults
     int param_count;
     char *return_type;
     struct ASTNode *body;
@@ -54,7 +56,11 @@ char *value_to_string(Value *value);
 const char *value_type_to_string(ValueType type);
 
 Function *function_create(const char *name, char **param_names, char **param_types, 
-                         int param_count, const char *return_type, struct ASTNode *body, bool is_public, Position declaration_pos);
+                         struct ASTNode **param_defaults, bool *param_has_default,
+                         int param_count, const char *return_type, struct ASTNode *body, 
+                         bool is_public, Position declaration_pos);
 void function_destroy(Function *func);
+
+char *infer_type_from_value(Value *value);
 
 #endif
