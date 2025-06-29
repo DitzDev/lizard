@@ -1,6 +1,6 @@
 # 🦎 Lizard Programming Language
 
-**Lizard** is a simple interpreted programming language with a clean syntax and friendly error messages. It's inspired by modern languages like Rust and Python, but focused on ease of use and readability. The `.lz` file extension is used for Lizard source files.
+**Lizard** is a interpreted programming language with a clean syntax, static type, and friendly error messages. It's inspired by modern languages like Rust and Python, but focused on ease of use and readability. The `.lz` file extension is used for Lizard source files.
 
 > Lizard is still under development. Contributions, suggestions, and feedback are welcome!
 

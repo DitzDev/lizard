@@ -333,7 +333,7 @@ static Value *evaluate_format_string(Interpreter *interpreter, ASTNode *node) {
           value_destroy(expr_value);
         } else {
            char placeholder[256];
-          size_t placeholder_len = end - (i + 2);
+          size_t placeholder_len __attribute__((unused)) = end - (i + 2);
           strncpy(placeholder, template + i, end - i + 1);
           placeholder[end - i + 1] = '\0';
           
