@@ -20,6 +20,22 @@ Parser *parser_create(Token *tokens, size_t token_count) {
   return parser;
 }
 
+bool validate_type_assignment(const char* declared_type, Value* value) {
+    if (!declared_type || !value) return true;
+    
+    const char* value_type = value_type_to_string(value->type);
+    
+    if (strcmp(declared_type, value_type) == 0) {
+        return true;
+    }
+    
+    if (strcmp(declared_type, "float") == 0 && value->type == VALUE_INT) {
+        return true;
+    }
+    
+    return false;
+}
+
 void parser_destroy(Parser *parser) {
   if (parser) {
     free(parser);
@@ -411,50 +427,58 @@ static ASTNode *parser_parse_expression(Parser *parser) {
 }
 
 static ASTNode *parser_parse_variable_declaration(Parser *parser) {
-  Token *let_token = parser_current_token(parser);
-  parser_advance(parser); // consume 'let'
-
-  ASTNode *node = ast_create_node(AST_VARIABLE_DECLARATION, let_token->pos);
-
-  // Check for type annotation
-  if (parser_current_token(parser)->type == TOKEN_IDENTIFIER &&
-      parser_peek_token(parser)->type == TOKEN_COLON) {
-    // let type: name = value
-    node->variable_declaration.var_type =
-        strdup(parser_current_token(parser)->value);
-    parser_advance(parser); // consume type
-    parser_advance(parser); // consume ':'
-
-    if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
-      error_report(ERROR_PARSER, parser_current_token(parser)->pos,
-                   "Expected variable name after type annotation",
-                   "Use format: let type: name = value");
-      parser_advance(parser);
-      return NULL;
+    Token *start_token = parser_current_token(parser);
+    bool is_fixed = false;
+    
+    if (parser_current_token(parser)->type == TOKEN_KEYWORD_FIXED) {
+        is_fixed = true;
+        parser_advance(parser); // consume 'fixed'
+    }
+    
+    if (!parser_match(parser, TOKEN_KEYWORD_LET)) {
+        error_report(ERROR_PARSER, parser_current_token(parser)->pos,
+                     "Expected 'let' keyword",
+                     "Use 'let name' or 'fixed let type: name'");
+        return NULL;
     }
 
-    node->variable_declaration.name =
-        strdup(parser_current_token(parser)->value);
-    parser_advance(parser);
-  } else if (parser_current_token(parser)->type == TOKEN_IDENTIFIER) {
-    // let name = value (auto type)
-    node->variable_declaration.name =
-        strdup(parser_current_token(parser)->value);
-    node->variable_declaration.var_type = NULL;
-    parser_advance(parser);
-  } else {
-    error_report(ERROR_PARSER, parser_current_token(parser)->pos,
-                 "Expected variable name or type annotation",
-                 "Use 'let name = value' or 'let type: name = value'");
-    parser_advance(parser);
-    return NULL;
-  }
+    ASTNode *node = ast_create_node(AST_VARIABLE_DECLARATION, start_token->pos);
+    node->variable_declaration.is_fixed = is_fixed;
 
-  parser_expect(parser, TOKEN_ASSIGN, "Expected '=' after variable name");
-  node->variable_declaration.initializer = parser_parse_expression(parser);
-  parser_match(parser, TOKEN_SEMICOLON);
+    if (parser_current_token(parser)->type == TOKEN_IDENTIFIER &&
+        parser_peek_token(parser)->type == TOKEN_COLON) {
+        node->variable_declaration.var_type = strdup(parser_current_token(parser)->value);
+        parser_advance(parser); // consume type
+        parser_advance(parser); // consume ':'
 
-  return node;
+        if (parser_current_token(parser)->type != TOKEN_IDENTIFIER) {
+            error_report(ERROR_PARSER, parser_current_token(parser)->pos,
+                         "Expected variable name after type annotation",
+                         "Use format: let type: name = value");
+            return NULL;
+        }
+
+        node->variable_declaration.name = strdup(parser_current_token(parser)->value);
+        parser_advance(parser);
+    } else if (parser_current_token(parser)->type == TOKEN_IDENTIFIER) {
+        node->variable_declaration.name = strdup(parser_current_token(parser)->value);
+        node->variable_declaration.var_type = NULL;
+        parser_advance(parser);
+    } else {
+        error_report(ERROR_PARSER, parser_current_token(parser)->pos,
+                     "Expected variable name or type annotation",
+                     "Use 'let name = value' or 'let type: name = value'");
+        return NULL;
+    }
+
+    if (parser_match(parser, TOKEN_ASSIGN)) {
+        node->variable_declaration.initializer = parser_parse_expression(parser);
+    } else {
+        node->variable_declaration.initializer = NULL;
+    }
+
+    parser_match(parser, TOKEN_SEMICOLON);
+    return node;
 }
 
 static ASTNode *parser_parse_block_statement(Parser *parser) {
@@ -752,6 +776,7 @@ static ASTNode *parser_parse_statement(Parser *parser) {
 
   switch (token->type) {
   case TOKEN_KEYWORD_LET:
+  case TOKEN_KEYWORD_FIXED:
     return parser_parse_variable_declaration(parser);
   case TOKEN_KEYWORD_PUB:
   case TOKEN_KEYWORD_FNC:

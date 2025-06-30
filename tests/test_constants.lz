@@ -1,0 +1,11 @@
+# Late assign
+fixed let int: a;
+fixed let result;
+a = 100;
+
+# assign directly
+fixed let float: b = a / 23;
+# Result
+result = "Result from a / b + 100 is = ${b + 100}"
+
+println(result)

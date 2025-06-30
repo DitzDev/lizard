@@ -126,11 +126,15 @@ static char *lexer_read_number(Lexer *lexer) {
     bool has_dot = false;
     
     while (isdigit(lexer_current_char(lexer)) || 
+           lexer_current_char(lexer) == '_' || 
            (lexer_current_char(lexer) == '.' && !has_dot)) {
         if (lexer_current_char(lexer) == '.') {
             has_dot = true;
+            buffer[length++] = lexer_current_char(lexer);
+        } else if (lexer_current_char(lexer) == '_') {
+        } else {
+            buffer[length++] = lexer_current_char(lexer);
         }
-        buffer[length++] = lexer_current_char(lexer);
         lexer_advance(lexer);
     }
     
@@ -153,6 +157,7 @@ static char *lexer_read_identifier(Lexer *lexer) {
 
 static TokenType lexer_keyword_or_identifier(const char *text) {
     if (strcmp(text, "let") == 0) return TOKEN_KEYWORD_LET;
+    if (strcmp(text, "fixed") == 0) return TOKEN_KEYWORD_FIXED; 
     if (strcmp(text, "fnc") == 0) return TOKEN_KEYWORD_FNC;
     if (strcmp(text, "return") == 0) return TOKEN_KEYWORD_RETURN;
     if (strcmp(text, "pub") == 0) return TOKEN_KEYWORD_PUB;
@@ -317,6 +322,7 @@ const char *token_type_to_string(TokenType type) {
         case TOKEN_STRING: return "STRING";
         case TOKEN_NUMBER: return "NUMBER";
         case TOKEN_KEYWORD_LET: return "LET";
+        case TOKEN_KEYWORD_FIXED: return "FIXED";
         case TOKEN_KEYWORD_FNC: return "FNC";
         case TOKEN_KEYWORD_RETURN: return "RETURN";
         case TOKEN_KEYWORD_PUB: return "PUB";

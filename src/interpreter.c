@@ -314,7 +314,7 @@ static Value *evaluate_function_call(Interpreter *interpreter, ASTNode *node) {
       return NULL;
     }
 
-    environment_define(func_env, func->param_names[i], arg_value, param_type);
+    environment_define_default(func_env, func->param_names[i], arg_value, param_type);
   }
 
   Environment *prev_env = interpreter->current_env;
@@ -503,29 +503,48 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
   case AST_VARIABLE_DECLARATION: {
     Value *value = NULL;
     if (node->variable_declaration.initializer) {
-      value = interpreter_evaluate(interpreter,
-                                   node->variable_declaration.initializer);
-      if (!value)
-        return NULL;
-    } else {
-      value = value_create_null();
+        value = interpreter_evaluate(interpreter, node->variable_declaration.initializer);
+        if (!value) return NULL;
+        
+        if (!is_compatible_type(value, node->variable_declaration.var_type)) {
+            char error_msg[256];
+            const char *value_type = "unknown";
+            switch (value->type) {
+                case VALUE_INT: value_type = "int"; break;
+                case VALUE_FLOAT: value_type = "float"; break;
+                case VALUE_STRING: value_type = "string"; break;
+                case VALUE_BOOL: value_type = "bool"; break;
+                case VALUE_NULL: value_type = "null"; break;
+            }
+            snprintf(error_msg, sizeof(error_msg), 
+                     "Type mismatch: Expected '%s', got '%s' for variable '%s'",
+                     value_type, node->variable_declaration.var_type, 
+                     node->variable_declaration.name);
+            
+            error_report(ERROR_RUNTIME, node->pos, error_msg,
+                         "Make sure the assigned value matches the declared type");
+            value_destroy(value);
+            return NULL;
+        }
     }
 
     if (!environment_define(interpreter->current_env,
-                            node->variable_declaration.name, value,
-                            node->variable_declaration.var_type)) {
-      error_report(
-          ERROR_RUNTIME, node->pos, "Variable already declared in this scope",
-          "Use a different variable name or assign to existing variable");
-      value_destroy(value);
-      return NULL;
+                            node->variable_declaration.name, 
+                            value,
+                            node->variable_declaration.var_type,
+                            node->variable_declaration.is_fixed)) {
+        error_report(ERROR_RUNTIME, node->pos, 
+                     "Variable already declared in this scope",
+                     "Use a different variable name or assign to existing variable");
+        if (value) value_destroy(value);
+        return NULL;
     }
 
-    Value *result = value_copy(value);
-    value_destroy(value);
+    Value *result = value ? value_copy(value) : value_create_null();
+    if (value) value_destroy(value);
     return result;
   }
-
+  
   case AST_FUNCTION_DECLARATION: {
     Position return_type_pos = node->pos;
     if (node->function_declaration.return_type) {
@@ -535,8 +554,8 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
       node->function_declaration.name, 
       node->function_declaration.param_names,
       node->function_declaration.param_types,
-      node->function_declaration.param_defaults,    // New parameter
-      node->function_declaration.param_has_default, // New parameter
+      node->function_declaration.param_defaults,
+      node->function_declaration.param_has_default,
       node->function_declaration.param_count,
       node->function_declaration.return_type, 
       node->function_declaration.body,
@@ -544,7 +563,7 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
       node->pos); 
 
     Value *func_value = value_create_function(func);
-    environment_define(interpreter->current_env,
+    environment_define_default(interpreter->current_env,
                        node->function_declaration.name, func_value, "function");
     return NULL;
   }
@@ -607,7 +626,7 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
         environment_get(interpreter->current_env, node->identifier.name);
     if (!value) {
       error_report(ERROR_RUNTIME, node->pos, "Undefined variable",
-                   "Check if the variable is declared and in scope");
+                   "Check if the variables is has been declared correctly.");
       return NULL;
     }
     return value_copy(value);
@@ -620,17 +639,51 @@ Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {
     return evaluate_format_string(interpreter, node);
 
   case AST_ASSIGNMENT_EXPRESSION: {
-    Value *value =
-        interpreter_evaluate(interpreter, node->assignment_expression.value);
-    if (!value)
-      return NULL;
+    Value *value = interpreter_evaluate(interpreter, node->assignment_expression.value);
+    if (!value) return NULL;
 
-    if (!environment_set(interpreter->current_env,
-                         node->assignment_expression.name, value)) {
-      error_report(ERROR_RUNTIME, node->pos, "Variable not declared",
-                   "Declare the variable with 'let' before assignment");
-      value_destroy(value);
-      return NULL;
+    EnvEntry *var_entry = environment_get_entry(interpreter->current_env, node->assignment_expression.name);
+    if (!var_entry) {
+        error_report(ERROR_RUNTIME, node->pos, 
+                     "Variable not declared",
+                     "Declare the variable with 'let' before assignment");
+        value_destroy(value);
+        return NULL;
+    }
+    
+    if (!is_compatible_type(value, var_entry->type)) {
+        char error_msg[256];
+        const char *value_type = "unknown";
+        switch (value->type) {
+            case VALUE_INT: value_type = "int"; break;
+            case VALUE_FLOAT: value_type = "float"; break;
+            case VALUE_STRING: value_type = "string"; break;
+            case VALUE_BOOL: value_type = "bool"; break;
+            case VALUE_NULL: value_type = "null"; break;
+        }
+        snprintf(error_msg, sizeof(error_msg), 
+                 "Type mismatch: cannot assign %s to %s variable '%s'",
+                 value_type, var_entry->type ? var_entry->type : "auto", 
+                 node->assignment_expression.name);
+        
+        error_report(ERROR_RUNTIME, node->pos, error_msg,
+                     "Make sure the assigned value matches the declared type");
+        value_destroy(value);
+        return NULL;
+    }
+
+    if (!environment_set(interpreter->current_env, node->assignment_expression.name, value)) {
+        if (var_entry->is_fixed && var_entry->is_initialized) {
+            error_report(ERROR_RUNTIME, node->pos, 
+                         "Cannot reassign fixed variable",
+                         "Fixed variables can only be assigned once");
+        } else {
+            error_report(ERROR_RUNTIME, node->pos, 
+                         "Unknown assignment error",
+                         "Check variable declaration and scope");
+        }
+        value_destroy(value);
+        return NULL;
     }
 
     Value *result = value_copy(value);

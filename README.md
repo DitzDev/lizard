@@ -56,6 +56,16 @@ fnc division(int a, int b) -> float {
     return a / b;
 }
 
+fnc div_int(int a, int b) -> int {
+   return a %% b
+}
+
+fnc modulo(int a, int b) {
+   return a % b
+}
+
+println(div_int(100, 23))
+println(modulo(2, 100))
 println(minus(30, 20));
 println(times(300, 800));
 println(division(100, 20));
@@ -70,20 +80,20 @@ println("Hello World");
 ```
 
 ## Variables
-
-Lizard supports variables with both explicit and inferred types. All variables must be declared with let.
-
+Lizard supports constant (immutable) variables using the `fixed` syntax.
+Constants can only be assigned once and are enforced at runtime:
 ```lz
-# With explicit type
-let string: name = "Adit";
+fixed let int: age = 21;
 
-# With inferred type
-let name = "ADIT";
+fixed let string: name;
+name = "Adit";     # ✅ valid (first assignment)
+name = "Alice";    # ❌ Runtime Error: Cannot reassign fixed variable
 
-println(name);
+# Mutable variable
+let string: country;
+country = "Indonesia"
 ```
-
-> ⚠️ Currently, all variables are mutable. Immutable variables are not yet supported.
+Lizard will display a friendly runtime error if a fixed variable is reassigned, but will continue executing the rest of the program.
 
 ## Roadmap / TODO
 

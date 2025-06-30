@@ -130,7 +130,7 @@ void error_show_code_context(const char *filename, int line, int column) {
         for (int i = 1; i < column; i++) {
             printf(" ");
         }
-        printf("^ here\n");
+        printf("^^^^^^^\n\n");
     }
     
     fclose(file);
@@ -169,10 +169,10 @@ void error_show_code_context_smart(const char *filename, int line, int column, E
         
         int highlight_width = get_error_highlight_width(type, buffer, column);
         
-        for (int i = 0; i < highlight_width; i++) {
+        for (int i = 3; i < highlight_width; i++) {
             printf("^");
         }
-        printf(" here\n");
+        printf("^^^^ Maybe in this column.\n\n");
     }
     
     fclose(file);
@@ -223,7 +223,7 @@ void error_report_with_code(ErrorType type, Position pos, const char *message,
         for (int i = 1; i < pos.column; i++) {
             printf(" ");
         }
-        printf("^ here\n");
+        printf("^^^^^^^\n\n");
     }
     
     if (suggestion) {

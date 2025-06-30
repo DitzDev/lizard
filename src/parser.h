@@ -35,6 +35,7 @@ typedef struct ASTNode {
             char *name;
             char *var_type;
             struct ASTNode *initializer;
+            bool is_fixed;
         } variable_declaration;
         
         struct {

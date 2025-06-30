@@ -134,7 +134,7 @@ bool import_process_module(ImportManager *manager, Interpreter *interpreter,
                 char qualified_name[256];
                 snprintf(qualified_name, sizeof(qualified_name), "%s.%s", 
                         new_module->name, entry->name);
-                environment_define(interpreter->current_env, qualified_name, 
+                environment_define_default(interpreter->current_env, qualified_name, 
                                  entry->value, entry->type);
             }
         }
@@ -185,7 +185,7 @@ bool import_process_statement(ImportManager *manager, Interpreter *interpreter,
             if (func_value && func_value->type == VALUE_FUNCTION) {
                 Function *func = func_value->function_val;
                 if (func->is_public) {
-                    environment_define(interpreter->current_env, func_name, 
+                    environment_define_default(interpreter->current_env, func_name, 
                                      func_value, "function");
                 } else {
                     Position pos = import_node->pos;
