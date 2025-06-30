@@ -284,6 +284,28 @@ Token *lexer_tokenize(Lexer *lexer) {
         lexer_advance(lexer);
     }
     
+    if (lexer->token_count == 0 || 
+        lexer->tokens[lexer->token_count - 1].type != TOKEN_EOF) {
+        
+        Token eof_token = {
+            .type = TOKEN_EOF,
+            .value = NULL,
+            .pos = {
+                .line = lexer->line,
+                .column = lexer->column,
+                .filename = lexer->filename ? strdup(lexer->filename) : NULL
+            }
+        };
+        
+        if (lexer->token_count >= lexer->token_capacity) {
+            lexer->token_capacity *= 2;
+            lexer->tokens = realloc(lexer->tokens, 
+                                  sizeof(Token) * lexer->token_capacity);
+        }
+        
+        lexer->tokens[lexer->token_count++] = eof_token;
+    }
+    
     lexer_add_token(lexer, TOKEN_EOF, "");
     return lexer->tokens;
 }

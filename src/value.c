@@ -92,7 +92,7 @@ void value_print(Value *value) {
     break;   
   case VALUE_FLOAT:
     // Lizard won't care if the result is too big
-    printf("%.128g", value->float_val);
+    printf("%.17g", value->float_val);
     break;
   case VALUE_STRING:
     printf("%s", value->string_val);

@@ -394,79 +394,97 @@ static Value *evaluate_function_call(Interpreter *interpreter, ASTNode *node) {
 }
 
 static Value *evaluate_format_string(Interpreter *interpreter, ASTNode *node) {
-  char *result = malloc(1024);
-  result[0] = '\0';
+    char *result = malloc(1024);
+    if (!result) return NULL;
+    
+    result[0] = '\0';
+    
+    const char *template = node->format_string.template;
+    int expr_index = 0;
+    size_t result_len = 0;
+    size_t result_capacity = 1024;
+    
+    for (size_t i = 0; template[i]; i++) {
+        if (template[i] == '$' && template[i + 1] == '{') {
+            // Find the end of the placeholder
+            size_t start = i + 2;
+            size_t end = start;
+            int brace_count = 1;
+            
+            while (template[end] && brace_count > 0) {
+                if (template[end] == '{') brace_count++;
+                else if (template[end] == '}') brace_count--;
+                end++;
+            }
+            
+            if (brace_count == 0 && expr_index < node->format_string.expression_count) {
+                Value *expr_value = interpreter_evaluate(interpreter, 
+                                                       node->format_string.expressions[expr_index]);
+                
+                if (expr_value) {
+                    char *expr_str = value_to_string(expr_value);
+                    size_t expr_len = strlen(expr_str);
 
-  const char *template = node->format_string.template;
-  int expr_index = 0;
-  size_t result_len = 0;
-  size_t result_capacity = 1024;
-
-  for (size_t i = 0; template[i]; i++) {
-    if (template[i] == '$' && template[i + 1] == '{') {
-      // Find the end of the placeholder
-      size_t end = i + 2;
-      while (template[end] && template[end] != '}')
-        end++;
-
-      if (template[end] == '}' &&
-          expr_index < node->format_string.expression_count) {
-        Value *expr_value = interpreter_evaluate(
-            interpreter, node->format_string.expressions[expr_index]);
-        if (!expr_value) {
-           printf("LIZARD-INTERPRET-DEBUG: Failed to evaluate expression at index %d\n", expr_index);
-        }
-        if (expr_value) {
-          char *expr_str = value_to_string(expr_value);
-          size_t expr_len = strlen(expr_str);
-
-          // Resize result buffer if needed
-          while (result_len + expr_len >= result_capacity) {
-            result_capacity *= 2;
-            result = realloc(result, result_capacity);
-          }
-
-          strcat(result, expr_str);
-          result_len += expr_len;
-
-          free(expr_str);
-          value_destroy(expr_value);
+                    while (result_len + expr_len >= result_capacity) {
+                        result_capacity *= 2;
+                        result = realloc(result, result_capacity);
+                        if (!result) {
+                            free(expr_str);
+                            value_destroy(expr_value);
+                            return NULL;
+                        }
+                    }
+                    
+                    strcat(result, expr_str);
+                    result_len += expr_len;
+                    
+                    free(expr_str);
+                    value_destroy(expr_value);
+                } else {
+                    printf("LIZARD-INTERPRET-DEBUG: Failed to evaluate expression at index %d\n", expr_index);
+                    
+                    char placeholder[256];
+                    size_t placeholder_len = end - i;
+                    if (placeholder_len < sizeof(placeholder)) {
+                        strncpy(placeholder, template + i, placeholder_len);
+                        placeholder[placeholder_len] = '\0';
+                        
+                        while (result_len + placeholder_len >= result_capacity) {
+                            result_capacity *= 2;
+                            result = realloc(result, result_capacity);
+                            if (!result) return NULL;
+                        }
+                        
+                        strcat(result, placeholder);
+                        result_len += placeholder_len;
+                    }
+                }
+                
+                expr_index++;
+                i = end - 1;
+            } else {
+                if (result_len + 1 >= result_capacity) {
+                    result_capacity *= 2;
+                    result = realloc(result, result_capacity);
+                    if (!result) return NULL;
+                }
+                result[result_len++] = template[i];
+                result[result_len] = '\0';
+            }
         } else {
-           char placeholder[256];
-          size_t placeholder_len __attribute__((unused)) = end - (i + 2);
-          strncpy(placeholder, template + i, end - i + 1);
-          placeholder[end - i + 1] = '\0';
-          
-          size_t ph_len = strlen(placeholder);
-          while (result_len + ph_len >= result_capacity) {
-            result_capacity *= 2;
-            result = realloc(result, result_capacity);
-          }
+            if (result_len + 1 >= result_capacity) {
+                result_capacity *= 2;
+                result = realloc(result, result_capacity);
+                if (!result) return NULL;
+            }
+            result[result_len++] = template[i];
+            result[result_len] = '\0';
         }
-        expr_index++;
-        i = end;
-      } else {
-        // Invalid placeholder, treat as literal
-        if (result_len + 1 >= result_capacity) {
-          result_capacity *= 2;
-          result = realloc(result, result_capacity);
-        }
-        result[result_len++] = template[i];
-        result[result_len] = '\0';
-      }
-    } else {
-      if (result_len + 1 >= result_capacity) {
-        result_capacity *= 2;
-        result = realloc(result, result_capacity);
-      }
-      result[result_len++] = template[i];
-      result[result_len] = '\0';
     }
-  }
-
-  Value *string_value = value_create_string(result);
-  free(result);
-  return string_value;
+    
+    Value *string_value = value_create_string(result);
+    free(result);
+    return string_value;
 }
 
 Value *interpreter_evaluate(Interpreter *interpreter, ASTNode *node) {

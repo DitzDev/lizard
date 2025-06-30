@@ -1,3 +1,3 @@
-let result1 = 100 / 13
-let add = result1 + 100
+let result1 = 100 / 23
+let add = "The result is ${result1 + 100 * 100}"
 println(add)

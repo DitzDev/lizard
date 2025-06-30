@@ -66,17 +66,19 @@ static bool parser_expect(Parser *parser, TokenType type, const char *message) {
   parser_advance(parser);
   return false;
 }
+static ASTNode *parser_parse_expression(Parser *parser);
+static ASTNode *parser_parse_statement(Parser *parser);
+static ASTNode *parser_parse_expression_from_string(Parser *parser, const char *expr_str);
 
 static ASTNode *ast_create_node(ASTNodeType type, Position pos) {
   ASTNode *node = malloc(sizeof(ASTNode));
   if (!node)
     return NULL;
 
-  memset(node, 0, sizeof(ASTNode)); // Initialize all fields to 0/NULL
+  memset(node, 0, sizeof(ASTNode));
   node->type = type;
   node->pos = pos;
 
-  // Safe copy of filename if it exists
   if (pos.filename && strlen(pos.filename) > 0) {
     node->pos.filename = strdup(pos.filename);
   } else {
@@ -86,69 +88,94 @@ static ASTNode *ast_create_node(ASTNodeType type, Position pos) {
   return node;
 }
 
-static ASTNode *parser_parse_format_string(Parser *parser,
-                                           const char *template) {
-  ASTNode *node =
-      ast_create_node(AST_FORMAT_STRING, parser_current_token(parser)->pos);
-  if (!node)
-    return NULL;
+static ASTNode *parser_parse_format_string(Parser *parser, const char *template) {
+    ASTNode *node = ast_create_node(AST_FORMAT_STRING, parser_current_token(parser)->pos);
+    if (!node) return NULL;
 
-  node->format_string.template = strdup(template);
-  if (!node->format_string.template) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  node->format_string.expressions =
-      malloc(sizeof(ASTNode *) * MAX_FORMAT_EXPRESSIONS);
-  if (!node->format_string.expressions) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  node->format_string.expression_count = 0;
-
-  char *str = strdup(template);
-  if (!str) {
-    ast_destroy(node);
-    return NULL;
-  }
-
-  char *pos = str;
-
-  while ((pos = strchr(pos, '{')) != NULL &&
-         node->format_string.expression_count < MAX_FORMAT_EXPRESSIONS) {
-    char *end = strchr(pos, '}');
-    if (end) {
-      *end = '\0';
-      char *var_name = pos + 1;
-
-      ASTNode *var_node =
-          ast_create_node(AST_IDENTIFIER, parser_current_token(parser)->pos);
-      if (!var_node) {
-        free(str);
+    node->format_string.template = strdup(template);
+    if (!node->format_string.template) {
         ast_destroy(node);
         return NULL;
-      }
-
-      var_node->identifier.name = strdup(var_name);
-      if (!var_node->identifier.name) {
-        ast_destroy(var_node);
-        free(str);
-        ast_destroy(node);
-        return NULL;
-      }
-
-      node->format_string.expressions[node->format_string.expression_count++] =
-          var_node;
-      pos = end + 1;
-    } else {
-      break;
     }
-  }
 
-  free(str);
-  return node;
+    node->format_string.expressions = malloc(sizeof(ASTNode *) * MAX_FORMAT_EXPRESSIONS);
+    if (!node->format_string.expressions) {
+        ast_destroy(node);
+        return NULL;
+    }
+
+    node->format_string.expression_count = 0;
+
+    const char *pos = template;
+    while (*pos && node->format_string.expression_count < MAX_FORMAT_EXPRESSIONS) {
+        const char *start = strstr(pos, "${");
+        if (!start) break;
+        
+        const char *end = start + 2;
+        int brace_count = 1;
+        while (*end && brace_count > 0) {
+            if (*end == '{') brace_count++;
+            else if (*end == '}') brace_count--;
+            end++;
+        }
+        
+        if (brace_count > 0) {
+            error_report(ERROR_PARSER, parser_current_token(parser)->pos, 
+                        "Unmatched braces in format string",
+                        "Make sure all ${} are properly closed");
+            ast_destroy(node);
+            return NULL;
+        }
+        
+        // Extract expression string (without ${ and })
+        size_t expr_len = end - start - 3; // -3 for ${ and }
+        char *expr_str = malloc(expr_len + 1);
+        if (!expr_str) {
+            ast_destroy(node);
+            return NULL;
+        }
+        strncpy(expr_str, start + 2, expr_len);
+        expr_str[expr_len] = '\0';
+        
+        ASTNode *expr_node = parser_parse_expression_from_string(parser, expr_str);
+        free(expr_str);
+        
+        if (!expr_node) {
+            ast_destroy(node);
+            return NULL;
+        }
+        
+        node->format_string.expressions[node->format_string.expression_count++] = expr_node;
+        pos = end;
+    }
+
+    return node;
+}
+
+static ASTNode *parser_parse_expression_from_string(Parser *parser __attribute__((unused)), const char *expr_str) {
+    Lexer *lexer = lexer_create(expr_str, "<format_string>");
+    if (!lexer) return NULL;
+
+    Token *tokens = lexer_tokenize(lexer);
+    if (!tokens) {
+        lexer_destroy(lexer);
+        return NULL;
+    }
+    
+    size_t token_count = lexer->token_count;
+    
+    Parser *temp_parser = parser_create(tokens, token_count);
+    if (!temp_parser) {
+        lexer_destroy(lexer);
+        return NULL;
+    }
+    
+    ASTNode *expr_node = parser_parse_expression(temp_parser);
+
+    parser_destroy(temp_parser);
+    lexer_destroy(lexer);
+    
+    return expr_node;
 }
 
 static ASTNode *parser_process_string_literal(Parser *parser, const char *str_value, Position pos) {
@@ -161,9 +188,6 @@ static ASTNode *parser_process_string_literal(Parser *parser, const char *str_va
     return node;
   }
 }
-
-static ASTNode *parser_parse_expression(Parser *parser);
-static ASTNode *parser_parse_statement(Parser *parser);
 
 static ASTNode *parser_parse_primary(Parser *parser) {
   Token *token = parser_current_token(parser);
